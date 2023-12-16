@@ -40,12 +40,20 @@ app.get("/", (req, res) => {
     .then(async (result: any) => {
       console.log("result", result);
       try {
-        const results = await client.get(
-          "/sleep/date/2023-10-30.json",
+        const sleep = await client.get(
+          "/sleep/date/2023-10-30/2023-12-30.json",
           result.access_token
         );
+        const hrv = await client.get(
+          "/hrv/date/2023-10-30/2023-11-15.json",
+          result.access_token
+        );
+
         console.log("done");
-        res.send(results[0]);
+        res.send({
+          ...hrv[0],
+          ...sleep[0],
+        });
       } catch (error: any) {
         res.status(error.status).send(error);
       }
