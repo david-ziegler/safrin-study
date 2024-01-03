@@ -38,15 +38,18 @@ app.get("/", (req, res) => {
   client
     .getAccessToken(req.query.code, OUR_SERVER_URL)
     .then(async (result: any) => {
-      console.log("result", result);
+      console.log("result:", result);
       try {
         const sleep = await client.get(
           "/sleep/date/2023-10-30/2023-12-30.json",
           result.access_token
         );
 
-        console.log("done");
-        res.send(sleep[0]);
+        console.log("sleep data:", sleep[0]);
+        res.send(
+          `Vielen Dank! Die Authorisierung war erfolgreich. Bitte geben Sie folgende User-ID im Teilnahmeformular ein: 
+          ${result.user_id}`
+        );
       } catch (error: any) {
         res.status(error.status).send(error);
       }
