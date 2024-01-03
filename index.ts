@@ -44,16 +44,9 @@ app.get("/", (req, res) => {
           "/sleep/date/2023-10-30/2023-12-30.json",
           result.access_token
         );
-        const hrv = await client.get(
-          "/hrv/date/2023-10-30/2023-11-15.json",
-          result.access_token
-        );
 
         console.log("done");
-        res.send({
-          ...hrv[0],
-          ...sleep[0],
-        });
+        res.send(sleep[0]);
       } catch (error: any) {
         res.status(error.status).send(error);
       }
