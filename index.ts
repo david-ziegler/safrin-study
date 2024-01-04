@@ -1,6 +1,7 @@
 import express, { Request, Response } from "express";
 const FitbitApiClient = require("fitbit-node");
 import dotenv from "dotenv";
+import * as fs from "fs";
 
 dotenv.config();
 const {
@@ -45,9 +46,9 @@ app.get("/", (req, res) => {
           result.access_token
         );
 
-        console.log("sleep data:", sleep[0]);
+        writeToCsv(sleep[0].sleep);
         res.send(
-          `Vielen Dank! Die Authorisierung war erfolgreich. Bitte geben Sie folgende User-ID im Teilnahmeformular ein: 
+          `Vielen Dank! Die Autorisierung war erfolgreich. Bitte geben Sie folgende User-ID im Teilnahmeformular ein: 
           ${result.user_id}`
         );
       } catch (error: any) {
@@ -58,5 +59,29 @@ app.get("/", (req, res) => {
       res.status(error.status).send(error);
     });
 });
+
+function writeToCsv(data: any) {
+  const headers = [
+    "dateOfSleep",
+    "timeInBed",
+    "minutesAsleep",
+    "minutesAwake",
+    "minutesToFallAsleep",
+    "efficiency",
+    "minutesDeep",
+    "minutesLight",
+    "minutesRem",
+    "minutesAsleep",
+    "minutesRestless",
+  ];
+  let csv = `${headers.join(",")}\n`;
+  data.forEach((row: any) => {
+    const stages = row.levels.summary;
+    csv += `${row.dateOfSleep},${row.timeInBed},${row.minutesAsleep},${row.minutesAwake},${row.minutesToFallAsleep},${row.efficiency},${stages.deep?.minutes},${stages.light?.minutes},${stages.rem?.minutes},${stages.asleep?.minutes},${stages.restless?.minutes}\n`;
+  });
+  const filename = "./output/sleep.csv";
+  fs.writeFileSync(filename, csv);
+  console.log(`Wrote file to ${filename}`);
+}
 
 app.listen(3001);
