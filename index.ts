@@ -42,7 +42,7 @@ app.get("/", (req, res) => {
       console.log("result:", result);
       try {
         const sleep = await client.get(
-          "/sleep/date/2023-10-30/2023-12-30.json",
+          "/sleep/date/2023-10-30/2024-01-31.json",
           result.access_token
         );
 
@@ -68,16 +68,27 @@ function writeToCsv(data: any) {
     "minutesAwake",
     "minutesToFallAsleep",
     "efficiency",
-    "minutesDeep",
-    "minutesLight",
-    "minutesRem",
-    "minutesAsleep",
-    "minutesRestless",
+    "deep: count",
+    "deep: minutes",
+    "deep: thirtyDayAvgMinutes",
+    "light: count",
+    "light: minutes",
+    "light: thirtyDayAvgMinutes",
+    "rem: count",
+    "rem: minutes",
+    "rem: thirtyDayAvgMinutes",
+    "wake: count",
+    "wake: minutes",
+    "wake: thirtyDayAvgMinutes",
+    "asleep: count",
+    "asleep: minutes",
+    "restless: count",
+    "restless: minutes",
   ];
   let csv = `${headers.join(",")}\n`;
   data.forEach((row: any) => {
     const stages = row.levels.summary;
-    csv += `${row.dateOfSleep},${row.timeInBed},${row.minutesAsleep},${row.minutesAwake},${row.minutesToFallAsleep},${row.efficiency},${stages.deep?.minutes},${stages.light?.minutes},${stages.rem?.minutes},${stages.asleep?.minutes},${stages.restless?.minutes}\n`;
+    csv += `${row.dateOfSleep},${row.timeInBed},${row.minutesAsleep},${row.minutesAwake},${row.minutesToFallAsleep},${row.efficiency},${stages.deep?.count},${stages.deep?.minutes},${stages.deep?.thirtyDayAvgMinutes},${stages.light?.count},${stages.light?.minutes},${stages.light?.thirtyDayAvgMinutes},${stages.rem?.count},${stages.rem?.minutes},${stages.rem?.thirtyDayAvgMinutes},${stages.wake?.count},${stages.wake?.minutes},${stages.wake?.thirtyDayAvgMinutes},${stages.asleep?.count},${stages.asleep?.minutes},${stages.restless?.count},${stages.restless?.minutes}\n`;
   });
   const filename = "./output/sleep.csv";
   fs.writeFileSync(filename, csv);
