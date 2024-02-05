@@ -2,6 +2,7 @@ import express, { Request, Response } from "express";
 const FitbitApiClient = require("fitbit-node");
 import dotenv from "dotenv";
 import * as fs from "fs";
+import https from "https";
 
 dotenv.config();
 const {
@@ -21,6 +22,17 @@ const client = new FitbitApiClient({
   clientId: FITBIT_CLIENT_ID,
   clientSecret: FITBIT_CLIENT_SECRET,
   apiVersion: FITBIT_API_VERSION,
+});
+
+const sslOptions = {
+  key: fs.readFileSync("/etc/ssl/private/server-key_nopass.pem"),
+  cert: fs.readFileSync(
+    "/etc/ssl/certs/vm188165-lw_hosting_uni-hannover_de.pem"
+  ),
+};
+
+https.createServer(sslOptions, app).listen(3001, () => {
+  console.log("Server is running on port 3001 with HTTPS");
 });
 
 app.get("/authorize", (req: Request, res: Response) => {
@@ -94,5 +106,3 @@ function writeToCsv(data: any) {
   fs.writeFileSync(filename, csv);
   console.log(`Wrote file to ${filename}`);
 }
-
-app.listen(3001);
