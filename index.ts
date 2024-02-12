@@ -11,6 +11,7 @@ const {
   FITBIT_API_VERSION,
   OUR_SERVER_URL,
 } = process.env;
+
 const app = express();
 
 console.log("Starting...");
@@ -36,12 +37,7 @@ https.createServer(sslOptions, app).listen(3001, () => {
 });
 
 app.get("/authorize", (req: Request, res: Response) => {
-  res.redirect(
-    client.getAuthorizeUrl(
-      "activity heartrate location nutrition profile settings sleep social weight",
-      OUR_SERVER_URL
-    )
-  );
+  res.redirect(client.getAuthorizeUrl("sleep heartrate", OUR_SERVER_URL));
 });
 
 // handle the callback from the Fitbit authorization flow
