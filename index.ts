@@ -25,6 +25,9 @@ const client = new FitbitApiClient({
   apiVersion: FITBIT_API_VERSION,
 });
 
+let accessToken = "";
+let refreshToken = "";
+
 if (USE_HTTPS === "true") {
   const sslOptions = {
     key: fs.readFileSync("/etc/ssl/private/server-key_nopass.pem"),
@@ -51,22 +54,19 @@ app.get("/authorize", (req: Request, res: Response) => {
 
 // handle the callback from the Fitbit authorization flow
 app.get("/", (req, res) => {
-  console.log("retrieving data...");
   // exchange the authorization code we just received for an access token
   client
     .getAccessToken(req.query.code, OUR_SERVER_URL)
     .then(async (result: any) => {
-      console.log("result:", result);
+      console.log("User granted authorization:", result);
       try {
-        const sleep = await client.get(
-          "/sleep/date/2023-10-30/2024-01-31.json",
-          result.access_token
-        );
+        const userId = result.user_id;
+        accessToken = result.access_token;
+        refreshToken = result.refresh_token;
 
-        writeToCsv(sleep[0].sleep);
         res.send(
           `Vielen Dank! Die Autorisierung war erfolgreich. Bitte geben Sie folgende User-ID im Teilnahmeformular ein: 
-          ${result.user_id}`
+          ${userId}`
         );
       } catch (error: any) {
         res.status(error.status).send(error);
@@ -75,6 +75,23 @@ app.get("/", (req, res) => {
     .catch((error: any) => {
       res.status(error.status).send(error);
     });
+});
+
+app.get("/write-data", async (req, res) => {
+  console.log("Retrieving data...");
+  try {
+    const sleep = await client.get(
+      "/sleep/date/2023-10-30/2024-01-31.json",
+      accessToken
+    );
+
+    writeToCsv(sleep[0].sleep);
+
+    res.send("Data written successfully");
+    console.log("Data written successfully");
+  } catch (error: any) {
+    res.status(error.status).send(error);
+  }
 });
 
 function writeToCsv(data: any) {
