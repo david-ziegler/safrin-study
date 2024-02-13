@@ -10,6 +10,7 @@ const {
   FITBIT_CLIENT_SECRET,
   FITBIT_API_VERSION,
   OUR_SERVER_URL,
+  USE_HTTPS,
 } = process.env;
 
 const app = express();
@@ -17,7 +18,6 @@ const app = express();
 console.log("Starting...");
 console.log(`Fitbit API version: ${FITBIT_API_VERSION}`);
 console.log(`Fitbit client ID: ${FITBIT_CLIENT_ID}`);
-console.log(`Go to ${OUR_SERVER_URL}/authorize`);
 
 const client = new FitbitApiClient({
   clientId: FITBIT_CLIENT_ID,
@@ -25,16 +25,25 @@ const client = new FitbitApiClient({
   apiVersion: FITBIT_API_VERSION,
 });
 
-const sslOptions = {
-  key: fs.readFileSync("/etc/ssl/private/server-key_nopass.pem"),
-  cert: fs.readFileSync(
-    "/etc/ssl/certs/vm188165-lw_hosting_uni-hannover_de.pem"
-  ),
-};
+if (USE_HTTPS === "true") {
+  const sslOptions = {
+    key: fs.readFileSync("/etc/ssl/private/server-key_nopass.pem"),
+    cert: fs.readFileSync(
+      "/etc/ssl/certs/vm188165-lw_hosting_uni-hannover_de.pem"
+    ),
+  };
 
-https.createServer(sslOptions, app).listen(3001, () => {
-  console.log("Server is running on port 3001 with HTTPS");
-});
+  https.createServer(sslOptions, app).listen(3001, () => {
+    console.log(
+      `Server is running with HTTPS. Go to ${OUR_SERVER_URL}/authorize`
+    );
+  });
+} else {
+  app.listen(3001);
+  console.log(
+    `Server is running without HTTPS. Go to ${OUR_SERVER_URL}/authorize`
+  );
+}
 
 app.get("/authorize", (req: Request, res: Response) => {
   res.redirect(client.getAuthorizeUrl("sleep heartrate", OUR_SERVER_URL));
