@@ -11,6 +11,7 @@ const {
   FITBIT_API_VERSION,
   OUR_SERVER_URL,
   USE_HTTPS,
+  START_DATE,
 } = process.env;
 
 const app = express();
@@ -60,7 +61,6 @@ app.get("/", (req, res) => {
       try {
         const userId = result.user_id;
         const refreshToken = result.refresh_token;
-        const accessToken = result.access_token;
 
         // Persist refresh token for future use
         writeRefreshToken(userId, refreshToken);
@@ -70,16 +70,19 @@ app.get("/", (req, res) => {
           ${userId}`
         );
       } catch (error: any) {
-        res.status(error.status).send(error);
+        console.error(error);
+        res.status(500).send("An error occurred");
       }
     })
     .catch((error: any) => {
-      res.status(error.status).send(error);
+      console.error(error);
+      res.status(500).send("An error occurred");
     });
 });
 
 app.get("/write-data", async (req, res) => {
   console.log("/write-data");
+
   try {
     console.log("Read existing refresh tokens");
     const userIds = fs.readdirSync(`./data/refresh-tokens`);
@@ -104,7 +107,7 @@ app.get("/write-data", async (req, res) => {
 
       // Retrieve sleep data for this user
       const sleep = await client.get(
-        "/sleep/date/2023-10-30/2024-01-31.json",
+        `/sleep/date/${START_DATE}/${getTodayDateString()}.json`,
         newAccessToken
       );
       writeToCsv(sleep[0].sleep, userId);
@@ -112,7 +115,8 @@ app.get("/write-data", async (req, res) => {
 
     res.send("Data written successfully");
   } catch (error: any) {
-    res.status(error.status).send(error);
+    console.error(error);
+    res.status(500).send("An error occurred");
   }
 });
 
@@ -121,6 +125,7 @@ function writeRefreshToken(userId: string, refreshToken: string) {
 }
 
 function writeToCsv(data: any, userId: string) {
+  // Prepare data
   const headers = [
     "dateOfSleep",
     "timeInBed",
@@ -150,7 +155,20 @@ function writeToCsv(data: any, userId: string) {
     const stages = row.levels.summary;
     csv += `${row.dateOfSleep},${row.timeInBed},${row.minutesAsleep},${row.minutesAwake},${row.minutesToFallAsleep},${row.efficiency},${stages.deep?.count},${stages.deep?.minutes},${stages.deep?.thirtyDayAvgMinutes},${stages.light?.count},${stages.light?.minutes},${stages.light?.thirtyDayAvgMinutes},${stages.rem?.count},${stages.rem?.minutes},${stages.rem?.thirtyDayAvgMinutes},${stages.wake?.count},${stages.wake?.minutes},${stages.wake?.thirtyDayAvgMinutes},${stages.asleep?.count},${stages.asleep?.minutes},${stages.restless?.count},${stages.restless?.minutes}\n`;
   });
-  const filename = `./data/sleep/${userId}.csv`;
+
+  // Write file
+  const dateString = getTodayDateString();
+  const folder = `./data/sleep/${userId}`;
+  fs.mkdirSync(folder, { recursive: true }); // `recursive` is necessary to do nothing if the folder already exists
+  const filename = `${folder}/${dateString}.csv`;
   fs.writeFileSync(filename, csv);
   console.log(`Wrote file to ${filename}`);
+}
+
+function getTodayDateString(): string {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  return `${now.getFullYear()}-${month
+    .toString()
+    .padStart(2, "0")}-${now.getDate()}`;
 }
