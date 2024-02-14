@@ -84,7 +84,7 @@ app.get("/write-data", async (req, res) => {
   console.log("/write-data");
 
   try {
-    console.log("Read existing refresh tokens");
+    console.log("Existing refresh tokens:");
     const userIds = fs.readdirSync(`./data/refresh-tokens`);
     console.log(userIds);
 
@@ -95,7 +95,10 @@ app.get("/write-data", async (req, res) => {
         `./data/refresh-tokens/${userId}`,
         "utf-8"
       );
-      console.log(`RefreshToken: ${refreshToken}, userId: ${userId}`);
+      const sleepDataUrl = `/sleep/date/${START_DATE}/2024-02-13.json`;
+      console.log(
+        `RefreshToken: ${refreshToken}, userId: ${userId}, URL: ${sleepDataUrl}`
+      );
       const result = await client.refreshAccessToken("", refreshToken);
       const newRefreshToken = result.refresh_token;
       const newAccessToken = result.access_token;
@@ -106,10 +109,12 @@ app.get("/write-data", async (req, res) => {
       console.log("Refreshed access token:", result);
 
       // Retrieve sleep data for this user
-      const sleep = await client.get(
-        `/sleep/date/${START_DATE}/${getTodayDateString()}.json`,
-        newAccessToken
-      );
+      const sleep = await client.get(sleepDataUrl, newAccessToken);
+      if (sleep[0].sleep === undefined) {
+        throw new Error(
+          `Error: sleep[0].sleep === 'undefined': ${sleepDataUrl}`
+        );
+      }
       writeToCsv(sleep[0].sleep, userId);
     }
 
