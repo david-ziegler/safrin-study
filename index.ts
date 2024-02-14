@@ -25,9 +25,6 @@ const client = new FitbitApiClient({
   apiVersion: FITBIT_API_VERSION,
 });
 
-let access_token = "";
-let refresh_token = "";
-
 if (USE_HTTPS === "true") {
   const sslOptions = {
     key: fs.readFileSync("/etc/ssl/private/server-key_nopass.pem"),
@@ -61,16 +58,16 @@ app.get("/", (req, res) => {
     .then(async (result: any) => {
       console.log("User granted authorization:", result);
       try {
-        const user_id = result.user_id;
-        refresh_token = result.refresh_token;
-        access_token = result.access_token;
+        const userId = result.user_id;
+        const refreshToken = result.refresh_token;
+        const accessToken = result.access_token;
 
         // Persist refresh token for future use
-        writeRefreshToken(user_id, refresh_token);
+        writeRefreshToken(userId, refreshToken);
 
         res.send(
           `Vielen Dank! Die Autorisierung war erfolgreich. Bitte geben Sie folgende User-ID im Teilnahmeformular ein: 
-          ${user_id}`
+          ${userId}`
         );
       } catch (error: any) {
         res.status(error.status).send(error);
@@ -82,22 +79,36 @@ app.get("/", (req, res) => {
 });
 
 app.get("/write-data", async (req, res) => {
-  console.log("Retrieving data...");
+  console.log("/write-data");
   try {
-    // Refresh Access Token
-    const result = await client.refreshAccessToken("", refresh_token);
-    const user_id = result.user_id;
-    refresh_token = result.refresh_token;
-    access_token = result.access_token;
-    writeRefreshToken(user_id, refresh_token);
-    console.log("new tokens:", result);
+    console.log("Read existing refresh tokens");
+    const userIds = fs.readdirSync(`./data/refresh-tokens`);
+    console.log(userIds);
 
-    // Retrieve sleep data
-    const sleep = await client.get(
-      "/sleep/date/2023-10-30/2024-01-31.json",
-      access_token
-    );
-    writeToCsv(sleep[0].sleep);
+    // For each user that granted authorization:
+    for (const userId of userIds) {
+      // Refresh Access Token
+      const refreshToken = fs.readFileSync(
+        `./data/refresh-tokens/${userId}`,
+        "utf-8"
+      );
+      console.log(`RefreshToken: ${refreshToken}, userId: ${userId}`);
+      const result = await client.refreshAccessToken("", refreshToken);
+      const newRefreshToken = result.refresh_token;
+      const newAccessToken = result.access_token;
+      console.log("UserId:", userId);
+
+      // Write refresh token to file for future requests
+      writeRefreshToken(userId, newRefreshToken);
+      console.log("Refreshed access token:", result);
+
+      // Retrieve sleep data for this user
+      const sleep = await client.get(
+        "/sleep/date/2023-10-30/2024-01-31.json",
+        newAccessToken
+      );
+      writeToCsv(sleep[0].sleep, userId);
+    }
 
     res.send("Data written successfully");
   } catch (error: any) {
@@ -109,7 +120,7 @@ function writeRefreshToken(userId: string, refreshToken: string) {
   fs.writeFileSync(`./data/refresh-tokens/${userId}`, refreshToken);
 }
 
-function writeToCsv(data: any) {
+function writeToCsv(data: any, userId: string) {
   const headers = [
     "dateOfSleep",
     "timeInBed",
@@ -139,7 +150,7 @@ function writeToCsv(data: any) {
     const stages = row.levels.summary;
     csv += `${row.dateOfSleep},${row.timeInBed},${row.minutesAsleep},${row.minutesAwake},${row.minutesToFallAsleep},${row.efficiency},${stages.deep?.count},${stages.deep?.minutes},${stages.deep?.thirtyDayAvgMinutes},${stages.light?.count},${stages.light?.minutes},${stages.light?.thirtyDayAvgMinutes},${stages.rem?.count},${stages.rem?.minutes},${stages.rem?.thirtyDayAvgMinutes},${stages.wake?.count},${stages.wake?.minutes},${stages.wake?.thirtyDayAvgMinutes},${stages.asleep?.count},${stages.asleep?.minutes},${stages.restless?.count},${stages.restless?.minutes}\n`;
   });
-  const filename = "./data/sleep.csv";
+  const filename = `./data/sleep/${userId}.csv`;
   fs.writeFileSync(filename, csv);
   console.log(`Wrote file to ${filename}`);
 }
