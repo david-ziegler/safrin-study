@@ -88,37 +88,46 @@ app.get("/write-data", async (req, res) => {
     const userIds = fs.readdirSync(`./data/refresh-tokens`);
     console.log(userIds);
 
-    // For each user that granted authorization:
-    for (const userId of userIds) {
-      // Refresh Access Token
-      const refreshToken = fs.readFileSync(
-        `./data/refresh-tokens/${userId}`,
-        "utf-8"
-      );
-      const sleepDataUrl = `/sleep/date/${START_DATE}/2024-02-13.json`;
-      console.log(
-        `RefreshToken: ${refreshToken}, userId: ${userId}, URL: ${sleepDataUrl}`
-      );
-      const result = await client.refreshAccessToken("", refreshToken);
-      const newRefreshToken = result.refresh_token;
-      const newAccessToken = result.access_token;
-      console.log("UserId:", userId);
+    if (START_DATE === undefined || START_DATE?.length === 0) {
+      console.error("Environment variable START_DATE is not defined");
+    } else {
+      const endDate = calculate100DaysFromDate(START_DATE);
 
-      // Write refresh token to file for future requests
-      writeRefreshToken(userId, newRefreshToken);
-      console.log("Refreshed access token:", result);
-
-      // Retrieve sleep data for this user
-      const sleep = await client.get(sleepDataUrl, newAccessToken);
-      if (sleep[0].sleep === undefined) {
-        throw new Error(
-          `Error: sleep[0].sleep === 'undefined': ${sleepDataUrl}`
+      // For each user that granted authorization:
+      for (const userId of userIds) {
+        // Refresh Access Token
+        const refreshToken = fs.readFileSync(
+          `./data/refresh-tokens/${userId}`,
+          "utf-8"
         );
-      }
-      writeToCsv(sleep[0].sleep, userId);
-    }
 
-    res.send("Data written successfully");
+        const sleepDataUrl = `/sleep/date/${START_DATE}/${endDate}.json`;
+        console.log(
+          `RefreshToken: ${refreshToken}, userId: ${userId}, URL: ${sleepDataUrl}`
+        );
+        const result = await client.refreshAccessToken("", refreshToken);
+        const newRefreshToken = result.refresh_token;
+        const newAccessToken = result.access_token;
+        console.log("UserId:", userId);
+
+        // Write refresh token to file for future requests
+        writeRefreshToken(userId, newRefreshToken);
+        console.log("Refreshed access token:", result);
+
+        // Retrieve sleep data for this user
+        const sleep = await client.get(sleepDataUrl, newAccessToken);
+        if (sleep[0].sleep === undefined) {
+          throw new Error(
+            `Error: sleep[0].sleep === 'undefined': ${sleepDataUrl}`
+          );
+        }
+        writeToCsv(sleep[0].sleep, userId);
+      }
+
+      res.send(
+        "Data written successfully: Start: " + START_DATE + ", End: " + endDate
+      );
+    }
   } catch (error: any) {
     console.error(error);
     res.status(500).send("An error occurred");
@@ -176,4 +185,17 @@ function getTodayDateString(): string {
   return `${now.getFullYear()}-${month
     .toString()
     .padStart(2, "0")}-${now.getDate()}`;
+}
+
+function calculate100DaysFromDate(inputDate: string) {
+  // Parse the input date string to a JavaScript Date object
+  var date = new Date(inputDate);
+
+  // Add 100 days to the input date
+  date.setDate(date.getDate() + 100);
+
+  // Format the resulting date as a string in "YYYY-MM-DD" format
+  var resultDate = date.toISOString().split("T")[0];
+
+  return resultDate;
 }
