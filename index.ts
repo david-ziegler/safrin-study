@@ -53,9 +53,17 @@ app.get("/authorize", (req: Request, res: Response) => {
 
 // Handle the callback from the Fitbit authorization flow
 app.get("/", (req, res) => {
+  const { code } = req.query;
+  if (!code) {
+    console.error(`Error in redirect endpoint: code=${code}`);
+    return res
+      .status(400)
+      .send(`Please go to ${OUR_SERVER_URL}/authorize first`);
+  }
+
   // exchange the authorization code we just received for an access token
   client
-    .getAccessToken(req.query.code, OUR_SERVER_URL)
+    .getAccessToken(code, OUR_SERVER_URL)
     .then(async (result: any) => {
       console.log("User granted authorization:", result);
       try {
@@ -70,12 +78,18 @@ app.get("/", (req, res) => {
           ${userId}`
         );
       } catch (error: any) {
-        console.error(error);
+        printError(
+          "Error in redirect endpoint `/` while writing refresh tokens",
+          error
+        );
         res.status(500).send("An error occurred");
       }
     })
     .catch((error: any) => {
-      console.error(error);
+      printError(
+        `Error in redirect endpoint while calling getAccessToken() with code=${req.query.code}`,
+        error
+      );
       res.status(500).send("An error occurred");
     });
 });
@@ -129,10 +143,14 @@ app.get("/write-data", async (req, res) => {
       );
     }
   } catch (error: any) {
-    console.error(error);
+    printError("Error in /write-data", error);
     res.status(500).send("An error occurred");
   }
 });
+
+function printError(message: string, error: any) {
+  console.error(`${message}: ${JSON.stringify(error, null, 2)}`);
+}
 
 function writeRefreshToken(userId: string, refreshToken: string) {
   fs.writeFileSync(`./data/refresh-tokens/${userId}`, refreshToken);
