@@ -94,7 +94,7 @@ app.get("/", (req, res) => {
     });
 });
 
-app.get("/write-data", async (req, res) => {
+app.get("/nucleus-repeat-cowbell/write-data", async (req, res) => {
   console.log("/write-data");
 
   try {
