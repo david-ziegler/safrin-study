@@ -61,7 +61,7 @@ app.get("/", (req, res) => {
       .send(`Please go to ${OUR_SERVER_URL}/authorize first`);
   }
 
-  // exchange the authorization code we just received for an access token
+  // Exchange the authorization code we just received for an access token
   client
     .getAccessToken(code, OUR_SERVER_URL)
     .then(async (result: any) => {
@@ -107,6 +107,9 @@ app.get("/nucleus-repeat-cowbell/write-data", async (req, res) => {
     } else {
       const endDate = calculate100DaysFromDate(START_DATE);
 
+      const errorUserIds = [];
+      const successUserIds = [];
+
       // For each user that granted authorization:
       for (const userId of userIds) {
         // Refresh Access Token
@@ -119,27 +122,39 @@ app.get("/nucleus-repeat-cowbell/write-data", async (req, res) => {
         console.log(
           `RefreshToken: ${refreshToken}, userId: ${userId}, URL: ${sleepDataUrl}`
         );
-        const result = await client.refreshAccessToken("", refreshToken);
-        const newRefreshToken = result.refresh_token;
-        const newAccessToken = result.access_token;
-        console.log("UserId:", userId);
+        try {
+          const result = await client.refreshAccessToken("", refreshToken);
+          const newRefreshToken = result.refresh_token;
+          const newAccessToken = result.access_token;
+          console.log("UserId:", userId);
 
-        // Write refresh token to file for future requests
-        writeRefreshToken(userId, newRefreshToken);
-        console.log("Refreshed access token:", result);
+          // Write refresh token to file for future requests
+          writeRefreshToken(userId, newRefreshToken);
+          console.log("Refreshed access token:", result);
 
-        // Retrieve sleep data for this user
-        const sleep = await client.get(sleepDataUrl, newAccessToken);
-        if (sleep[0].sleep === undefined) {
-          throw new Error(
-            `Error: sleep[0].sleep === 'undefined': ${sleepDataUrl}`
+          // Retrieve sleep data for this user
+          const sleep = await client.get(sleepDataUrl, newAccessToken);
+          if (sleep[0].sleep === undefined) {
+            throw new Error(
+              `Error: sleep[0].sleep === 'undefined': ${sleepDataUrl}`
+            );
+          }
+          writeToCsv(sleep[0].sleep, userId);
+          successUserIds.push(userId);
+        } catch (error: any) {
+          printError(
+            `Error while trying to retrieve data for user ${userId}. This user will be skipped.`,
+            error
           );
+          errorUserIds.push(userId);
         }
-        writeToCsv(sleep[0].sleep, userId);
       }
 
       res.send(
-        "Data written successfully: Start: " + START_DATE + ", End: " + endDate
+        `Data written successfully:
+        Start: ${START_DATE}, End: ${endDate} --- User IDs: ${successUserIds.join(
+          ", "
+        )} --- Users with error: ${errorUserIds.join(", ")}`
       );
     }
   } catch (error: any) {
