@@ -108,88 +108,155 @@ app.get("/nucleus-repeat-cowbell/write-data", async (req, res) => {
   try {
     console.log("Existing refresh tokens:");
     const userIds = fs.readdirSync(`./data/refresh-tokens`);
-    console.log(userIds);
+    console.log(userIds, `(${userIds.length})`);
 
     if (START_DATE === undefined || START_DATE?.length === 0) {
-      console.error("Environment variable START_DATE is not defined");
-    } else {
-      const endDate30daysLater = calculate30DaysFromDate(START_DATE);
-      const endDate100daysLater = calculate100DaysFromDate(START_DATE);
-
-      const errorUserIds = [];
-      const successUserIds = [];
-
-      // For each user that granted authorization:
-      for (const userId of userIds) {
-        // Refresh Access Token
-        const refreshToken = fs.readFileSync(
-          `./data/refresh-tokens/${userId}`,
-          "utf-8"
-        );
-
-        const sleepDataUrl = `/sleep/date/${START_DATE}/${endDate100daysLater}.json`;
-        const hrvUrl = `/hrv/date/${START_DATE}/${endDate30daysLater}.json`;
-        const heartRateUrl = `/activities/heart/date/${START_DATE}/${endDate30daysLater}.json`;
-        console.log(
-          `RefreshToken: ${refreshToken}, userId: ${userId}, URLs: ${sleepDataUrl}, ${hrvUrl}, ${heartRateUrl}`
-        );
-        try {
-          console.log("UserId:", userId);
-          console.log("Refresh access token...");
-          const result = await clientSleep.refreshAccessToken("", refreshToken);
-
-          // Write refresh token to file for future requests
-          writeRefreshToken(userId, result.refresh_token);
-
-          // Retrieve sleep data for this user
-          console.log("Fetch sleep data: ", sleepDataUrl);
-          const sleep = await clientSleep.get(
-            sleepDataUrl,
-            result.access_token
-          );
-          if (sleep[0].sleep === undefined) {
-            throw new Error(
-              `Error: sleep[0].sleep === 'undefined': ${sleepDataUrl}`
-            );
-          }
-          writeSleepToCsv(sleep[0].sleep, userId);
-
-          console.log("Fetch hrv data: ", hrvUrl);
-          const hrv = await clientHeartRate.get(hrvUrl, result.access_token);
-          writeHrvToCsv(hrv[0].hrv, userId);
-
-          console.log("Fetch heart rate data: ", heartRateUrl);
-          const heartRate = await clientHeartRate.get(
-            heartRateUrl,
-            result.access_token
-          );
-          writeHeartRateToCsv(heartRate[0]["activities-heart"], userId);
-
-          successUserIds.push(userId);
-        } catch (error: any) {
-          printError(
-            `Error while trying to retrieve or write data for user ${userId}. This user will be skipped.`,
-            error
-          );
-          errorUserIds.push(userId);
-        }
-      }
-
-      res.send(
-        `Data written successfully:
-        Start: ${START_DATE}, End: ${endDate100daysLater} --- User IDs: ${successUserIds.join(
-          ", "
-        )} --- Users with error: ${errorUserIds.join(", ")}`
-      );
+      throw new Error("Environment variable START_DATE is not defined");
     }
+
+    const errorUserIds = [];
+    const successUserIds = [];
+
+    const sleepDataUrl = `/sleep/date/${START_DATE}/${calculateDateXDaysLater(
+      START_DATE,
+      100
+    )}.json`;
+
+    // hrv can only be retrieved for max 30 days
+    const hrvUrl1 = `/hrv/date/${START_DATE}/${calculateDateXDaysLater(
+      START_DATE,
+      30
+    )}.json`;
+
+    const hrvUrl2 = `/hrv/date/${calculateDateXDaysLater(
+      START_DATE,
+      31
+    )}/${calculateDateXDaysLater(START_DATE, 60)}.json`;
+
+    const hrvUrl3 = `/hrv/date/${calculateDateXDaysLater(
+      START_DATE,
+      61
+    )}/${calculateDateXDaysLater(START_DATE, 90)}.json`;
+
+    const heartRateUrl = `/activities/heart/date/${START_DATE}/${calculateDateXDaysLater(
+      START_DATE,
+      100
+    )}.json`;
+
+    // For each user that granted authorization:
+    for (const userId of userIds) {
+      // Refresh Access Token
+      const refreshToken = fs.readFileSync(
+        `./data/refresh-tokens/${userId}`,
+        "utf-8"
+      );
+
+      console.log(
+        `RefreshToken: ${refreshToken}, userId: ${userId}, URLs: ${sleepDataUrl}, ${hrvUrl1}, ${hrvUrl2}, ${hrvUrl3}, ${heartRateUrl}`
+      );
+      try {
+        console.log("\nUserId:", userId);
+        console.log("Refresh access token...");
+        const result = await clientSleep.refreshAccessToken("", refreshToken);
+
+        // Write refresh token to file for future requests
+        writeRefreshToken(userId, result.refresh_token);
+
+        // Retrieve sleep data
+        const sleep = await fetchSleepData(sleepDataUrl, result.access_token);
+        console.log("write sleep");
+        writeSleepToCsv(sleep, userId);
+
+        // Retrieve hrv data (can only be retrieved for max 30 days)
+        const { hrv1, hrv2, hrv3 } = await fetchHrvData(
+          hrvUrl1,
+          hrvUrl2,
+          hrvUrl3,
+          result.access_token
+        );
+        writeHrvToCsv(hrv1, hrv2, hrv3, userId);
+
+        // Retrieve heart rate data
+        const heartRate = await fetchHeartRateData(
+          heartRateUrl,
+          result.access_token
+        );
+        writeHeartRateToCsv(heartRate, userId);
+
+        successUserIds.push(userId);
+      } catch (error: any) {
+        printError(
+          `Error while trying to retrieve or write data for user ${userId}. This user will be skipped.`,
+          error
+        );
+        errorUserIds.push(userId);
+      }
+    }
+
+    res.send(
+      `Data written successfully:
+        Start: ${START_DATE}, End: ${calculateDateXDaysLater(
+        START_DATE,
+        100
+      )} --- User IDs: ${successUserIds.join(
+        ", "
+      )} --- Users with error: ${errorUserIds.join(", ")}`
+    );
   } catch (error: any) {
     printError("Error in /write-data", error);
     res.status(500).send("An error occurred");
   }
 });
 
+async function fetchSleepData(url: string, accessToken: string) {
+  console.log("Fetch sleep data: ", url);
+  const sleep = await clientSleep.get(url, accessToken);
+  if (sleep[0] === undefined || sleep[0].sleep === undefined) {
+    throw new Error(`Error: sleep[0].sleep === 'undefined': ${url}`);
+  }
+  return sleep[0].sleep;
+}
+
+async function fetchHrvData(
+  url1: string,
+  url2: string,
+  url3: string,
+  accessToken: string
+) {
+  const hrv1 = await clientHeartRate.get(url1, accessToken);
+  const hrv2 = await clientHeartRate.get(url2, accessToken);
+  const hrv3 = await clientHeartRate.get(url3, accessToken);
+  if (hrv1[0] === undefined || hrv1[0].hrv === undefined) {
+    throw new Error(`Error: sleep[0].sleep === 'undefined': ${url1}`);
+  }
+  if (hrv2[0] === undefined || hrv2[0].hrv === undefined) {
+    throw new Error(`Error: sleep[0].sleep === 'undefined': ${url2}`);
+  }
+  if (hrv3[0] === undefined || hrv3[0].hrv === undefined) {
+    throw new Error(`Error: sleep[0].sleep === 'undefined': ${url3}`);
+  }
+
+  return { hrv1: hrv1[0].hrv, hrv2: hrv2[0].hrv, hrv3: hrv3[0].hrv };
+}
+
+async function fetchHeartRateData(url: string, accessToken: string) {
+  console.log("Fetch heart rate data: ", url);
+  const heartRate = await clientHeartRate.get(url, accessToken);
+  if (
+    heartRate[0] === undefined ||
+    heartRate[0]["activities-heart"] === undefined
+  ) {
+    throw new Error(
+      `Error: heartRate[0]["activities-heart"] === 'undefined': ${url}`
+    );
+  }
+  return heartRate[0]["activities-heart"];
+}
+
 function printError(message: string, error: any) {
-  console.error(`${message}: ${JSON.stringify(error, null, 2)}`);
+  console.error(message);
+  console.error(error);
+  console.error(JSON.stringify(error, null, 2));
 }
 
 function writeRefreshToken(userId: string, refreshToken: string) {
@@ -240,8 +307,8 @@ function writeSleepToCsv(data: any, userId: string) {
   let csv = `${headers.join(",")}\n`;
 
   data.forEach((row: any) => {
-    const stages = row.levels.summary;
-    csv += `${row.dateOfSleep},${row.duration},${row.efficiency},${row.endTime},${row.infoCode},${row.isMainSleep},${row.logId},${row.minutesAfterWakeup},${row.minutesAsleep},${row.minutesAwake},${row.minutesToFallAsleep},${row.logType},${row.startTime},${row.timeInBed},${row.type},${row.levels.data.dateTime},${row.levels.data.level},${row.levels.data.seconds},${row.levels.shortData.dateTime},${row.levels.shortData.level},${row.levels.shortData.seconds},${stages.deep?.count},${stages.deep?.minutes},${stages.deep?.thirtyDayAvgMinutes},${stages.light?.count},${stages.light?.minutes},${stages.light?.thirtyDayAvgMinutes},${stages.rem?.count},${stages.rem?.minutes},${stages.rem?.thirtyDayAvgMinutes},${stages.wake?.count},${stages.wake?.minutes},${stages.wake?.thirtyDayAvgMinutes},${row.asleep?.count},${row.asleep?.minutes},${row.restless?.count},${row.restless?.minutes}\n`;
+    const stages = row.levels?.summary;
+    csv += `${row.dateOfSleep},${row.duration},${row.efficiency},${row.endTime},${row.infoCode},${row.isMainSleep},${row.logId},${row.minutesAfterWakeup},${row.minutesAsleep},${row.minutesAwake},${row.minutesToFallAsleep},${row.logType},${row.startTime},${row.timeInBed},${row.type},${row.levels?.data?.dateTime},${row.levels?.data?.level},${row.levels?.data?.seconds},${row.levels?.shortData?.dateTime},${row.levels?.shortData?.level},${row.levels?.shortData?.seconds},${stages?.deep?.count},${stages?.deep?.minutes},${stages?.deep?.thirtyDayAvgMinutes},${stages?.light?.count},${stages?.light?.minutes},${stages?.light?.thirtyDayAvgMinutes},${stages?.rem?.count},${stages?.rem?.minutes},${stages?.rem?.thirtyDayAvgMinutes},${stages?.wake?.count},${stages?.wake?.minutes},${stages?.wake?.thirtyDayAvgMinutes},${row.asleep?.count},${row.asleep?.minutes},${row.restless?.count},${row.restless?.minutes}\n`;
   });
 
   // Write file
@@ -253,11 +320,17 @@ function writeSleepToCsv(data: any, userId: string) {
   console.log(`Wrote file to ${filename}`);
 }
 
-function writeHrvToCsv(data: any, userId: string) {
+function writeHrvToCsv(data1: any, data2: any, data3: any, userId: string) {
   // Prepare data
   const headers = ["dateTime", "dailyRmssd", "deepRmssd"];
   let csv = `${headers.join(",")}\n`;
-  data.forEach((row: any) => {
+  data1.forEach((row: any) => {
+    csv += `${row.dateTime},${row.value.dailyRmssd},${row.value.deepRmssd}\n`;
+  });
+  data2.forEach((row: any) => {
+    csv += `${row.dateTime},${row.value.dailyRmssd},${row.value.deepRmssd}\n`;
+  });
+  data3.forEach((row: any) => {
     csv += `${row.dateTime},${row.value.dailyRmssd},${row.value.deepRmssd}\n`;
   });
 
@@ -319,17 +392,9 @@ function getTodayDateString(): string {
     .padStart(2, "0")}-${now.getDate()}`;
 }
 
-function calculate30DaysFromDate(inputDate: string) {
+function calculateDateXDaysLater(inputDate: string, days: number) {
   var date = new Date(inputDate);
-  date.setDate(date.getDate() + 30);
-  var resultDate = date.toISOString().split("T")[0];
-
-  return resultDate;
-}
-
-function calculate100DaysFromDate(inputDate: string) {
-  var date = new Date(inputDate);
-  date.setDate(date.getDate() + 100);
+  date.setDate(date.getDate() + days);
   var resultDate = date.toISOString().split("T")[0];
 
   return resultDate;
